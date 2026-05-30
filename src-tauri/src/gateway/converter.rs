@@ -1751,6 +1751,21 @@ fn sanitize_history(mut items: Vec<HistoryItem>) -> Vec<HistoryItem> {
         }
     }).map(|(_, item)| item).collect();
 
+    // 步骤 2.5（规则 7）：保留下来的第一条 user 必须非空。
+    // 孤儿 toolResults 清理（步骤 1.5）后，原本仅靠 toolResults 的首条 user 可能变空，
+    // 而首条 user 会被无条件保留 → 空 user 会被 Kiro 判 400，这里兜底补 content。
+    if let Some(HistoryItem::User { user_input_message }) = items.first_mut() {
+        let has_results = user_input_message
+            .user_input_message_context
+            .as_ref()
+            .and_then(|c| c.tool_results.as_ref())
+            .map(|r| !r.is_empty())
+            .unwrap_or(false);
+        if user_input_message.content.trim().is_empty() && !has_results {
+            user_input_message.content = "Continue".to_string();
+        }
+    }
+
     // 步骤 3：补充缺失的 toolResults
     // 如果 assistant 有 toolUses 但下一条 user 没有对应 toolResults，插入错误占位
     let mut patched: Vec<HistoryItem> = Vec::new();
