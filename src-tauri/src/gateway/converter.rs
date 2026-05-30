@@ -1234,6 +1234,25 @@ pub fn get_available_models() -> Vec<ModelInfo> {
     .collect()
 }
 
+/// 将账号实时可用模型 ID 列表转为 ModelInfo（claude 系列补 -thinking 变体），用于 /v1/models
+pub fn models_from_ids(ids: &[String]) -> Vec<ModelInfo> {
+    ids.iter()
+        .flat_map(|id| {
+            if id.starts_with("claude-") && !id.ends_with("-thinking") {
+                vec![id.clone(), format!("{id}-thinking")]
+            } else {
+                vec![id.clone()]
+            }
+        })
+        .map(|id| ModelInfo {
+            id,
+            object: "model".to_string(),
+            created: 1_700_000_000,
+            owned_by: "anthropic".to_string(),
+        })
+        .collect()
+}
+
 fn convert_anthropic_content(content: &Value) -> Value {
     match content {
         Value::String(text) => Value::String(text.clone()),

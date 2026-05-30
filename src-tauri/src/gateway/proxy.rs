@@ -47,7 +47,7 @@ const COUNT_TOKENS_SAFETY_MULTIPLIER: f64 = 1.15;
 use super::{
     append_gateway_request_log,
     converter::{
-        build_kiro_payload, get_available_models,
+        build_kiro_payload, get_available_models, models_from_ids,
         normalize_anthropic_request, normalize_responses_request,
     },
     eventstream::decode_message,
@@ -256,10 +256,18 @@ struct GatewayErrorDetails<'a> {
     response_body: Option<&'a str>,
 }
 
-fn build_models_response() -> Value {
+async fn build_models_response(state: &RouterState) -> Value {
+    // 优先用账号实时可用模型列表（含 4.8 等新模型），失败/为空时回退静态列表
+    let data = match resolve_upstream_credentials(&state.config, state).await {
+        Ok(upstream) => match get_available_models_for_upstream(&upstream).await {
+            Ok(ids) if !ids.is_empty() => models_from_ids(&ids),
+            _ => get_available_models(),
+        },
+        Err(_) => get_available_models(),
+    };
     serde_json::to_value(ModelsResponse {
         object: "list".to_string(),
-        data: get_available_models(),
+        data,
     })
     .unwrap_or_else(|_| json!({ "object": "list", "data": [] }))
 }
@@ -883,13 +891,14 @@ pub async fn models_handler(
     client_addr: SocketAddr,
     headers: HeaderMap,
 ) -> Response {
+    let body = build_models_response(&state).await;
     guarded_local_response(
         state,
         client_addr,
         headers,
         "models",
         None,
-        build_models_response(),
+        body,
     )
     .await
 }

@@ -1,3 +1,5 @@
+import { useState, useEffect } from 'react'
+import { invoke } from '@tauri-apps/api/core'
 import { Plus, Trash2, Zap } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -103,10 +105,30 @@ interface ModelMappingDialogProps {
   modelMappings: any[]
   setField: (key: string, value: any) => void
   onSave?: () => void
+  accountId?: string | null
 }
 
-function ModelMappingDialog({ open, onOpenChange, modelMappings, setField, onSave }: ModelMappingDialogProps) {
+function ModelMappingDialog({ open, onOpenChange, modelMappings, setField, onSave, accountId }: ModelMappingDialogProps) {
   const rules = modelMappings || []
+
+  // 实时拉取账号可用模型（走后端缓存），claude 系列补 -thinking 变体，与静态列表并集去重作兜底
+  const [liveModels, setLiveModels] = useState<string[]>([])
+  useEffect(() => {
+    if (!open || !accountId) return
+    invoke<any>('list_available_models', { id: accountId })
+      .then(res => {
+        const ids = (Array.isArray(res?.availableModels) ? res.availableModels : [])
+          .map((m: any) => m?.modelId)
+          .filter((id: any): id is string => typeof id === 'string' && id.length > 0)
+        setLiveModels(ids.flatMap((id: string) =>
+          id.startsWith('claude-') && !id.endsWith('-thinking') ? [id, `${id}-thinking`] : [id]
+        ))
+      })
+      .catch(() => setLiveModels([]))
+  }, [open, accountId])
+
+  const sourceOptions = Array.from(new Set([...liveModels, ...SOURCE_MODELS]))
+  const targetOptions = Array.from(new Set([...liveModels, ...TARGET_MODELS]))
 
   const handleToggle = (idx: number, checked: boolean) => {
     const updated = [...rules]
@@ -211,13 +233,13 @@ function ModelMappingDialog({ open, onOpenChange, modelMappings, setField, onSav
               <div className="relative">
                 <Input placeholder="源模型名" className="text-xs" id="dialog-mapping-source" list="model-list-source" />
                 <datalist id="model-list-source">
-                  {SOURCE_MODELS.map(m => <option key={m} value={m} />)}
+                  {sourceOptions.map(m => <option key={m} value={m} />)}
                 </datalist>
               </div>
               <div className="relative">
                 <Input placeholder="目标模型名" className="text-xs" id="dialog-mapping-target" list="model-list-target" />
                 <datalist id="model-list-target">
-                  {TARGET_MODELS.map(m => <option key={m} value={m} />)}
+                  {targetOptions.map(m => <option key={m} value={m} />)}
                 </datalist>
               </div>
             </div>

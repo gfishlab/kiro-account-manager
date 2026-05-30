@@ -330,6 +330,7 @@ function GatewayConfig({
         modelMappings={config.modelMappings}
         setField={setField}
         onSave={handleSaveConfig}
+        accountId={config.accountId || accountOptions[0]?.value}
       />
 
       {/* ApiKeysDialog */}
