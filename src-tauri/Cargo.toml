@@ -77,5 +77,5 @@ codegen-units = 256  # 增加并行编译单元
 codegen-units = 16   # 提高并行度，加快编译（从 8 改为 16）
 lto = "thin"         # 保留链接时优化，但避免 fat LTO 的高耗时
 opt-level = "s"      # 优先减小体积，同时避免 z 级别优化带来的额外编译成本
-panic = "abort"      # 禁用 panic 处理器，提升性能
+# 不使用 panic = "abort"：保留 unwind，单个后台/网关任务 panic 时只失败该任务而非整个进程崩溃
 strip = true         # 移除符号信息，减小体积

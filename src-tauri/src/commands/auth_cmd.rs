@@ -177,7 +177,7 @@ async fn login_social(
     let (new_email, user_id) = extract_user_info(&usage_result.usage_data);
     let final_email = new_email
         .or(user_id.clone())
-        .unwrap_or_else(|| format!("{}_{}", provider_id.to_lowercase(), &token_result.refresh_token[..8]));
+        .unwrap_or_else(|| format!("{}_{}", provider_id.to_lowercase(), token_result.refresh_token.chars().take(8).collect::<String>()));
 
     // 6. 保存账号
     let mut store = lock_store(&state.store, "store")?;

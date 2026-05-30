@@ -361,7 +361,7 @@ fn format_messages_for_summary(messages: &[NormalizedMessage]) -> String {
 
             // 限制每条消息的长度
             let truncated = if text.len() > 1000 {
-                format!("{}...[已截断]", &text[..1000])
+                format!("{}...[已截断]", &text[..crate::gateway::proxy::safe_truncate(&text, 1000)])
             } else {
                 text
             };

@@ -1297,8 +1297,8 @@ pub async fn proxy_handler(
             drop(cache_guard);
             log::info!(
                 "[响应缓存] 命中! session={}, hash={}, 响应长度={}",
-                &cache_session_id[..cache_session_id.len().min(16)],
-                &messages_hash[..16],
+                &cache_session_id[..safe_truncate(&cache_session_id, 16)],
+                &messages_hash[..safe_truncate(&messages_hash, 16)],
                 cached.response.len()
             );
 
@@ -1877,8 +1877,8 @@ pub async fn proxy_handler(
         drop(cache_guard);
         log::debug!(
             "[响应缓存] 已写入: session={}, hash={}",
-            &cache_session_id[..cache_session_id.len().min(16)],
-            &messages_hash[..16]
+            &cache_session_id[..safe_truncate(&cache_session_id, 16)],
+            &messages_hash[..safe_truncate(&messages_hash, 16)]
         );
     }
 
@@ -2934,7 +2934,7 @@ fn extract_error_message(body: &str) -> String {
 }
 
 /// 安全截断字符串到指定字节数，确保不会切到 UTF-8 多字节字符中间
-fn safe_truncate(s: &str, max_bytes: usize) -> usize {
+pub(crate) fn safe_truncate(s: &str, max_bytes: usize) -> usize {
     if s.len() <= max_bytes {
         return s.len();
     }
@@ -4063,7 +4063,7 @@ fn stream_proxy_response(
                 log_context.request_index,
                 aggregated.text.len(),
                 aggregated.thinking.len(),
-                aggregated.tool_calls.iter().map(|(id, name, args)| format!("{}({})={}", name, id, &args[..args.len().min(100)])).collect::<Vec<_>>(),
+                aggregated.tool_calls.iter().map(|(id, name, args)| format!("{}({})={}", name, id, &args[..safe_truncate(args, 100)])).collect::<Vec<_>>(),
                 aggregated.input_tokens,
                 aggregated.output_tokens,
             );
@@ -4297,9 +4297,9 @@ async fn send_event(
             .join(".kiro-account-manager")
             .join("logs");
         let entry = if let Some(event_name) = event {
-            format!("[{}] SSE event={}: {}\n", chrono::Local::now().format("%H:%M:%S%.3f"), event_name, &payload[..payload.len().min(2000)])
+            format!("[{}] SSE event={}: {}\n", chrono::Local::now().format("%H:%M:%S%.3f"), event_name, &payload[..safe_truncate(payload, 2000)])
         } else {
-            format!("[{}] SSE data: {}\n", chrono::Local::now().format("%H:%M:%S%.3f"), &payload[..payload.len().min(2000)])
+            format!("[{}] SSE data: {}\n", chrono::Local::now().format("%H:%M:%S%.3f"), &payload[..safe_truncate(payload, 2000)])
         };
         let _ = std::fs::OpenOptions::new()
             .create(true)

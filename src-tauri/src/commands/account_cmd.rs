@@ -548,7 +548,7 @@ pub async fn add_account_by_social(
     // BuilderId 账号允许使用 userId 或 email，如果都没有则用 refreshToken 作为标识
     let final_email = new_email
         .or(user_id.clone())
-        .unwrap_or_else(|| format!("builderid_{}", &refresh_token[..8]));
+        .unwrap_or_else(|| format!("builderid_{}", refresh_token.chars().take(8).collect::<String>()));
 
     // 根据邮箱推断最终 provider
     let idp = provider.unwrap_or_else(|| {

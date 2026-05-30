@@ -222,6 +222,21 @@ fn handle_deep_link_event(app_handle: &tauri::AppHandle, payload: &str) {
 
 /// 应用 setup 回调
 fn setup_app(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error>> {
+    // 安装 panic 钩子：把任意线程（含 tokio-runtime-worker）的 panic 位置与信息写入 app.log
+    std::panic::set_hook(Box::new(|info| {
+        let location = info
+            .location()
+            .map(|l| format!("{}:{}", l.file(), l.line()))
+            .unwrap_or_else(|| "unknown".to_string());
+        let msg = info
+            .payload()
+            .downcast_ref::<&str>()
+            .copied()
+            .or_else(|| info.payload().downcast_ref::<String>().map(String::as_str))
+            .unwrap_or("<non-string panic>");
+        log::error!("PANIC at {location}: {msg}");
+    }));
+
     // 初始化 deep link 处理器
     core::deep_link_handler::init();
 

@@ -499,7 +499,7 @@ fn convert_anthropic_tool(tool: &crate::gateway::models::AnthropicTool) -> (Tool
     // 截断超长描述（和 Kiro-Go 保持一致）
     let description = tool.description.as_ref().map(|desc| {
         if desc.len() > TOOL_DESCRIPTION_MAX_LENGTH {
-            format!("{}...", &desc[..TOOL_DESCRIPTION_MAX_LENGTH])
+            format!("{}...", &desc[..crate::gateway::proxy::safe_truncate(desc, TOOL_DESCRIPTION_MAX_LENGTH)])
         } else {
             desc.clone()
         }

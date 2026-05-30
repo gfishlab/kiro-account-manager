@@ -73,7 +73,7 @@ pub fn parse_kiro_event_full(json_str: &str) -> Option<KiroEvent> {
     if is_metering_or_usage_event {
         log::debug!("[Token 解析] 发现 token/usage 事件: {}",
             if json_str.len() > 500 {
-                format!("{}...", &json_str[..500])
+                format!("{}...", &json_str[..crate::gateway::proxy::safe_truncate(json_str, 500)])
             } else {
                 json_str.to_string()
             }
