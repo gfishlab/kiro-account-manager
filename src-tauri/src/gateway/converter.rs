@@ -1131,27 +1131,15 @@ pub async fn build_kiro_payload(
         }
     };
 
-    // 最终保护：如果 content 和 toolResults 都为空，设置默认 content
+    // 最终保护：content 与 toolResults 不能同时为空（规则 7）。
+    // 有 toolResults 时允许空 content —— 与 history 中带 toolResults 的 user 保持一致，消除前后矛盾。
     if current_content.trim().is_empty() && current_tool_results.is_empty() {
         current_content = "Continue".to_string();
     }
-    // 如果有 toolResults，content 必须为空（Kiro API 要求）
-    // 同时检查原始消息中是否有 tool_result 内容
-    let original_has_tool_results = match current_message.content.as_ref() {
-        Some(Value::Array(arr)) => arr.iter().any(|item| {
-            item.get("type").and_then(|t| t.as_str()) == Some("tool_result")
-        }),
-        _ => false,
-    } || current_message.tool_call_id.is_some();
 
-    // ✅ 修复：Kiro API 不接受空 content，即使有 toolResults
-    // 如果有 toolResults 但 content 不为空，保留 content
-    // 如果有 toolResults 且 content 为空，设置占位符
-    if !current_tool_results.is_empty() || original_has_tool_results {
-        if current_content.trim().is_empty() {
-            current_content = "[Tool results]".to_string();
-        }
-    }
+    // 发送前最终校验（仅记录可定位日志，整形已由 sanitize_history 完成）
+    validate_kiro_history(&history, &current_content, &current_tool_results);
+
     let current_images = extract_images(client, current_message.content.as_ref()).await;
 
     // 始终设置 agent_continuation_id 和 agent_task_type
@@ -1700,6 +1688,42 @@ fn sanitize_history(mut items: Vec<HistoryItem>) -> Vec<HistoryItem> {
         });
     }
 
+    // 步骤 1.5（规则 5/6）：移除孤儿 toolResults
+    // user 的每个 toolResult 必须能在「前一条 assistant 的 toolUses」里找到匹配的 toolUseId，
+    // 否则 Kiro 会判 TOOL_RESULTS_AND_NO_USES / ORPHAN_IDS → 400。截断或异常历史都可能产生孤儿。
+    for i in 0..items.len() {
+        let allowed: std::collections::HashSet<String> = if i > 0 {
+            if let HistoryItem::Assistant { assistant_response_message } = &items[i - 1] {
+                assistant_response_message
+                    .tool_uses
+                    .as_ref()
+                    .map(|tus| tus.iter().map(|t| t.tool_use_id.clone()).collect())
+                    .unwrap_or_default()
+            } else {
+                std::collections::HashSet::new()
+            }
+        } else {
+            std::collections::HashSet::new()
+        };
+        if let HistoryItem::User { user_input_message } = &mut items[i] {
+            if let Some(ctx) = &mut user_input_message.user_input_message_context {
+                if let Some(results) = &mut ctx.tool_results {
+                    let before = results.len();
+                    results.retain(|r| allowed.contains(&r.tool_use_id));
+                    if results.len() != before {
+                        log::warn!(
+                            "[网关][sanitize] 丢弃 {} 个孤儿 toolResults（无匹配的前置 toolUse）",
+                            before - results.len()
+                        );
+                    }
+                    if results.is_empty() {
+                        ctx.tool_results = None;
+                    }
+                }
+            }
+        }
+    }
+
     // 步骤 2：过滤空 user 消息（保留第一个 user 和有 content/toolResults 的 user）
     let first_user_idx = items.iter().position(|item| matches!(item, HistoryItem::User { .. }));
     items = items.into_iter().enumerate().filter(|(idx, item)| {
@@ -1828,6 +1852,100 @@ fn sanitize_history(mut items: Vec<HistoryItem>) -> Vec<HistoryItem> {
     items = alternated;
 
     items
+}
+
+/// 发送前最终校验：对 history + currentMessage 跑 Kiro 的 7 条规则，仅记录可定位日志
+/// （整形由 sanitize_history 负责）。目的：把上游不可见的 400 提前变成本地可见告警。
+fn validate_kiro_history(
+    history: &Option<Vec<HistoryItem>>,
+    current_content: &str,
+    current_tool_results: &[KiroToolResult],
+) {
+    let items: &[HistoryItem] = history.as_deref().unwrap_or(&[]);
+    let mut v: Vec<String> = Vec::new();
+
+    if let Some(first) = items.first() {
+        if !matches!(first, HistoryItem::User { .. }) {
+            v.push("R1 history 未以 user 开始".into());
+        }
+    }
+    for w in items.windows(2) {
+        if matches!(
+            (&w[0], &w[1]),
+            (HistoryItem::User { .. }, HistoryItem::User { .. })
+                | (HistoryItem::Assistant { .. }, HistoryItem::Assistant { .. })
+        ) {
+            v.push("R3 history 存在连续同角色".into());
+            break;
+        }
+    }
+    for (i, item) in items.iter().enumerate() {
+        match item {
+            HistoryItem::Assistant { assistant_response_message: a } => {
+                if a.content.trim().is_empty() {
+                    v.push(format!("R-空 第{i}条 assistant content 为空白"));
+                }
+                if let Some(tus) = &a.tool_uses {
+                    if !tus.is_empty() && i + 1 < items.len() {
+                        if let HistoryItem::User { user_input_message: nu } = &items[i + 1] {
+                            let next_ids: std::collections::HashSet<&str> = nu
+                                .user_input_message_context
+                                .as_ref()
+                                .and_then(|c| c.tool_results.as_ref())
+                                .map(|rs| rs.iter().map(|r| r.tool_use_id.as_str()).collect())
+                                .unwrap_or_default();
+                            if !tus.iter().all(|t| next_ids.contains(t.tool_use_id.as_str())) {
+                                v.push(format!("R4 第{i}条 assistant.toolUses 与下一条 user.toolResults 不匹配"));
+                            }
+                        }
+                    }
+                }
+            }
+            HistoryItem::User { user_input_message: u } => {
+                let has_results = u
+                    .user_input_message_context
+                    .as_ref()
+                    .and_then(|c| c.tool_results.as_ref())
+                    .map(|r| !r.is_empty())
+                    .unwrap_or(false);
+                if u.content.trim().is_empty() && !has_results {
+                    v.push(format!("R7 第{i}条 user 既无 content 也无 toolResults"));
+                }
+                if has_results {
+                    let ok = i > 0
+                        && matches!(&items[i - 1], HistoryItem::Assistant { assistant_response_message: a }
+                            if a.tool_uses.as_ref().map(|t| !t.is_empty()).unwrap_or(false));
+                    if !ok {
+                        v.push(format!("R5 第{i}条 user.toolResults 缺少前置 assistant.toolUses"));
+                    }
+                }
+            }
+        }
+    }
+    // currentMessage（user）：content 或 toolResults 非空
+    if current_content.trim().is_empty() && current_tool_results.is_empty() {
+        v.push("R7 currentMessage 既无 content 也无 toolResults".into());
+    }
+    // 末条 assistant 带 toolUses → currentMessage 必须带匹配 toolResults
+    if let Some(HistoryItem::Assistant { assistant_response_message: a }) = items.last() {
+        if let Some(tus) = &a.tool_uses {
+            if !tus.is_empty() {
+                let cur_ids: std::collections::HashSet<&str> =
+                    current_tool_results.iter().map(|r| r.tool_use_id.as_str()).collect();
+                if !tus.iter().all(|t| cur_ids.contains(t.tool_use_id.as_str())) {
+                    v.push("R4 末条 assistant.toolUses 与 currentMessage.toolResults 不匹配".into());
+                }
+            }
+        }
+    }
+
+    if !v.is_empty() {
+        log::error!(
+            "[网关][校验] 发送前发现 {} 处不符合 Kiro 规则（sanitize 未覆盖，可能 400）：{}",
+            v.len(),
+            v.join("; ")
+        );
+    }
 }
 
 
