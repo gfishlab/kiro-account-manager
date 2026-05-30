@@ -3243,6 +3243,8 @@ fn stream_proxy_response(
                                             saw_tool_calls = true;
                                             // 还原工具名称
                                             let original_name = restore_tool_name(&name);
+                                            // 修复：用还原后的原始工具名发给客户端，否则 Claude Code 收到 sanitized 名会报 "No such tool available"
+                                            let name = original_name.clone();
                                             tool_accumulators
                                                 .entry(id.clone())
                                                 .or_insert((original_name.clone(), String::new()));

@@ -2518,7 +2518,8 @@ fn extract_tool_uses(message: &NormalizedMessage) -> Option<Vec<KiroToolUse>> {
     let tool_uses: Vec<KiroToolUse> = tool_calls
         .iter()
         .map(|tool_call| KiroToolUse {
-            name: tool_call.function.name.clone(),
+            // 与 toolSpecification 保持一致：历史里的 tool_use 名字也需 sanitize，否则 Kiro 拒绝（名字不匹配）
+            name: shorten_tool_name(&sanitize_tool_name(&tool_call.function.name)),
             input: serde_json::from_str(&tool_call.function.arguments)
                 .unwrap_or_else(|_| json!({})),
             tool_use_id: tool_call.id.clone(),
