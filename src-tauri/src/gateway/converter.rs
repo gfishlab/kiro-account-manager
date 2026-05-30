@@ -1967,10 +1967,11 @@ pub fn history_assistant_message_from_response_content(
 fn build_history_assistant_message(message: &NormalizedMessage) -> HistoryAssistantMessage {
     let content = extract_text_content(message.content.as_ref());
     let tool_uses = extract_tool_uses(message);
-    // Kiro API 要求 assistant content 非空
+    // Kiro API 要求 assistant content 去空白后非空：纯空字符串 "" 或纯空格 " " 都会被判
+    // "Improperly formed request." 这里对“仅有 toolUses、无正文”的回合用非空白占位文本。
     let content = if content.trim().is_empty() {
         if tool_uses.is_some() {
-            " ".to_string() // 有 toolUses 时用空格占位
+            "(tool call)".to_string() // 有 toolUses 但无正文时的非空白占位
         } else {
             "I understand.".to_string()
         }
