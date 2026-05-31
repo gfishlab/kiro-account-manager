@@ -15,14 +15,8 @@ jobs:
         include:
           - platform: windows-2022
             target: ''
-          - platform: windows-2022
-            target: 'aarch64-pc-windows-msvc'
-          - platform: macos-15-intel
-            target: 'x86_64-apple-darwin'
           - platform: macos-latest
             target: 'aarch64-apple-darwin'
-          - platform: ubuntu-22.04
-            target: ''
 
     runs-on: ${{ matrix.platform }}
 
