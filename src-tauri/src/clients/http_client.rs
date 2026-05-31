@@ -45,7 +45,13 @@ const SUPPORTED_KIRO_REGIONS: &[&str] = &[
 ];
 
 // 企业账号多区域探测优先级列表（按使用频率排序）
+//
+// 不能再单独维护一份精简列表 —— issue #103 那位 ap-southeast-2 的企业用户被这层挡掉，
+// 报 502。SUPPORTED_KIRO_REGIONS 收 38 个、这里却只有 10 个，肯定漏。
+// 现在覆盖跟 SUPPORTED_KIRO_REGIONS 同等的全集，前面留高频 region 不破坏探测命中率，
+// 后面追加低频 region 兜底，尽可能首次探测就命中、不必用户手动改 region 字段。
 const USAGE_PROBE_REGIONS: &[&str] = &[
+    // 高频
     "us-east-1",
     "eu-central-1",
     "us-west-2",
@@ -56,6 +62,33 @@ const USAGE_PROBE_REGIONS: &[&str] = &[
     "us-west-1",
     "eu-west-2",
     "ap-northeast-2",
+    // 兜底（低频但受支持）
+    "ap-southeast-2",
+    "ap-southeast-3",
+    "ap-southeast-4",
+    "ap-southeast-5",
+    "ap-southeast-7",
+    "ap-northeast-3",
+    "ap-south-1",
+    "ap-south-2",
+    "ap-east-1",
+    "eu-west-3",
+    "eu-north-1",
+    "eu-south-1",
+    "eu-south-2",
+    "eu-central-2",
+    "ca-central-1",
+    "ca-west-1",
+    "sa-east-1",
+    "me-south-1",
+    "me-central-1",
+    "il-central-1",
+    "mx-central-1",
+    "af-south-1",
+    "us-gov-west-1",
+    "us-gov-east-1",
+    "cn-north-1",
+    "cn-northwest-1",
 ];
 
 fn normalize_kiro_region(region: Option<&str>) -> Option<String> {
