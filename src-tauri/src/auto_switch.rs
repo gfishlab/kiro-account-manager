@@ -269,15 +269,16 @@ fn find_available_account(
                 return false;
             }
 
-            // 排除不可用账号
+            // 排除不可用账号（banned / invalid 是真不可用）
+            // 注意：capped / 封顶不在这里硬排除——开启了超额的 capped 账号
+            // remaining 仍可能 > 0（base 用完但 overageCap 还有空间），
+            // 应该交由下面的 calculate_remaining + threshold 判断（issue #98）。
             let status = acc.status.to_lowercase();
             if status == "banned"
                 || status == "封禁"
                 || status == "已封禁"
                 || status == "invalid"
                 || status == "失效"
-                || status == "capped"
-                || status == "封顶"
             {
                 return false;
             }
