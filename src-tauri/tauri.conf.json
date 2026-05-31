@@ -51,9 +51,9 @@
     },
     "updater": {
       "endpoints": [
-        "https://github.com/hj01857655/kiro-account-manager/releases/latest/download/latest.json"
+        "https://github.com/gfishlab/kiro-account-manager/releases/latest/download/latest.json"
       ],
-      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDhFREY2NUE1MTlEQzg3QjEKUldTeGg5d1pwV1hmanY3SG55V2VZWkd2SXhGeHhwWXgxUXFZR3NjWWdubFhidXNmc2JXVjZMVmUK",
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDJFMDczMDg5RjMzM0IzRkUKUldUK3N6UHppVEFITGpPNFpmRE1DdzJjYldsT0RpSGxlVWd5UVJKR1VLUExFcEdpeWFBRnJoOXcK",
       "windows": {
         "installMode": "passive"
       }
