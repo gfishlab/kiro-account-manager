@@ -541,6 +541,7 @@ mod tests {
                 last_failure_at: None,
                 disabled_reason: None,
                 success_count: 0,
+                enabled: true,
             },
             Account {
                 id: "2".to_string(),
@@ -572,6 +573,7 @@ mod tests {
                 last_failure_at: None,
                 disabled_reason: None,
                 success_count: 0,
+                enabled: true,
             },
         ];
 

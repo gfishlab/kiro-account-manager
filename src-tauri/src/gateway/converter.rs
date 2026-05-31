@@ -3008,10 +3008,16 @@ mod tests {
                 allowed_domains: None,
                 blocked_domains: None,
                 user_location: None,
+                cache_control: None,
             }]),
             tool_choice: Some(json!({"type":"auto"})),
             thinking: None,
             metadata: None,
+            top_k: None,
+            context_editing: None,
+            mcp_servers: None,
+            betas: None,
+            cache_control: None,
         };
 
         let converted = normalize_anthropic_request(&request);
@@ -3080,10 +3086,12 @@ mod tests {
                         "properties": { "q": { "type": "string" } }
                     })),
                 },
+                cache_control: None,
             }]),
             tool_choice: None,
             previous_response_id: None,
         thinking: None,
+            tool_name_map: Default::default(),
         };
 
         let payload = build_kiro_payload(
@@ -3154,6 +3162,7 @@ mod tests {
             tool_choice: None,
             previous_response_id: None,
         thinking: None,
+            tool_name_map: Default::default(),
         };
 
         let payload = build_kiro_payload(&Client::new(), &request, None, None)
@@ -3190,6 +3199,7 @@ mod tests {
             tool_choice: None,
             previous_response_id: None,
         thinking: None,
+            tool_name_map: Default::default(),
         };
 
         let payload = build_kiro_payload(&Client::new(), &request, None, None)
@@ -3415,10 +3425,12 @@ mod tests {
                         "properties": { "q": { "type": "string" } }
                     })),
                 },
+                cache_control: None,
             }]),
             tool_choice: Some(json!({ "type": "function", "name": "search_docs" })),
             previous_response_id: None,
         thinking: None,
+            tool_name_map: Default::default(),
         };
 
         let payload = build_kiro_payload(&Client::new(), &request, None, None)
@@ -3459,6 +3471,7 @@ mod tests {
             tool_choice: None,
             previous_response_id: Some("resp_prev_123".to_string()),
         thinking: None,
+            tool_name_map: Default::default(),
         };
 
         let payload = build_kiro_payload(&Client::new(), &request, None, None)
@@ -3494,10 +3507,12 @@ mod tests {
                         "properties": { "q": { "type": "string" } }
                     })),
                 },
+                cache_control: None,
             }]),
             tool_choice: Some(json!({ "type": "function", "name": "missing_tool" })),
             previous_response_id: None,
         thinking: None,
+            tool_name_map: Default::default(),
         };
 
         let error = build_kiro_payload(&Client::new(), &request, None, None)
@@ -3540,6 +3555,7 @@ mod tests {
             tool_choice: None,
             previous_response_id: None,
         thinking: None,
+            tool_name_map: Default::default(),
         };
 
         let payload = build_kiro_payload(&Client::new(), &request, None, None)
@@ -3630,6 +3646,7 @@ mod tests {
             tool_choice: None,
             previous_response_id: None,
         thinking: None,
+            tool_name_map: Default::default(),
         };
 
         let payload = build_kiro_payload(&Client::new(), &request, None, None)
@@ -3677,6 +3694,7 @@ mod tests {
             tool_choice: None,
             previous_response_id: None,
         thinking: None,
+            tool_name_map: Default::default(),
         };
 
         let payload = build_kiro_payload(&Client::new(), &request, None, None)
@@ -3758,6 +3776,7 @@ mod tests {
             tool_choice: None,
             previous_response_id: None,
         thinking: None,
+            tool_name_map: Default::default(),
         };
 
         let payload = build_kiro_payload(&Client::new(), &request, None, None)
@@ -3912,6 +3931,11 @@ mod tests {
             tool_choice: None,
             thinking: None,
             metadata: None,
+            top_k: None,
+            context_editing: None,
+            mcp_servers: None,
+            betas: None,
+            cache_control: None,
         };
 
         let converted = normalize_anthropic_request(&request);

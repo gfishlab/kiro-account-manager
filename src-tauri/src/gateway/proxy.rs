@@ -725,22 +725,23 @@ fn trim_kiro_payload_history(payload: &mut Value, max_bytes: usize) -> bool {
             break;
         }
 
-        // 检查第一条消息是否是 Assistant 消息且包含 tool_uses
+        // 检查第一条消息是否是 Assistant 消息且包含 toolUses
+        // 注意：payload 已序列化为 camelCase（serde rename_all="camelCase"），必须用 camelCase 读取
         let first_is_assistant_with_tools = history
             .first()
-            .and_then(|msg| msg.get("assistant_response_message"))
-            .and_then(|msg| msg.get("tool_uses"))
+            .and_then(|msg| msg.get("assistantResponseMessage"))
+            .and_then(|msg| msg.get("toolUses"))
             .and_then(|tools| tools.as_array())
             .map(|arr| !arr.is_empty())
             .unwrap_or(false);
 
         if first_is_assistant_with_tools && history.len() > 1 {
-            // 检查第二条消息是否是 User 消息且包含 tool_results
+            // 检查第二条消息是否是 User 消息且包含 toolResults
             let second_has_tool_results = history
                 .get(1)
-                .and_then(|msg| msg.get("user_input_message"))
-                .and_then(|msg| msg.get("user_input_message_context"))
-                .and_then(|ctx| ctx.get("tool_results"))
+                .and_then(|msg| msg.get("userInputMessage"))
+                .and_then(|msg| msg.get("userInputMessageContext"))
+                .and_then(|ctx| ctx.get("toolResults"))
                 .and_then(|results| results.as_array())
                 .map(|arr| !arr.is_empty())
                 .unwrap_or(false);
@@ -765,6 +766,42 @@ fn trim_kiro_payload_history(payload: &mut Value, max_bytes: usize) -> bool {
         history.remove(0);
         removed_count += 1;
         log::debug!("[网关] 移除单条消息。剩余: {}", history.len());
+    }
+
+    // 裁剪后头部合法化：裁剪可能删掉某个 toolResult 对应的前置 toolUse(assistant)，
+    // 留下「孤儿 toolResults」或让 history 以 assistant 开头，二者都会被 Kiro 判
+    // "Improperly formed request." 400。这里做最终兜底（裁剪后不再走 sanitize_history）。
+    if let Some(history) = payload
+        .pointer_mut("/conversationState/history")
+        .and_then(|v| v.as_array_mut())
+    {
+        // history 必须以 user 开始：移除开头连续的 assistant
+        while history
+            .first()
+            .map(|m| m.get("assistantResponseMessage").is_some())
+            .unwrap_or(false)
+        {
+            history.remove(0);
+            removed_count += 1;
+        }
+        // 首条 user 若带 toolResults，则必为孤儿（前面已无 toolUse）→ 清空并保证 content 非空
+        if let Some(uim) = history
+            .first_mut()
+            .and_then(|m| m.get_mut("userInputMessage"))
+            .and_then(|v| v.as_object_mut())
+        {
+            if let Some(ctx) = uim.get_mut("userInputMessageContext").and_then(|v| v.as_object_mut()) {
+                ctx.remove("toolResults");
+            }
+            let content_empty = uim
+                .get("content")
+                .and_then(|c| c.as_str())
+                .map(|s| s.trim().is_empty())
+                .unwrap_or(true);
+            if content_empty {
+                uim.insert("content".to_string(), Value::String("Continue".to_string()));
+            }
+        }
     }
 
     let final_len = payload
@@ -4472,6 +4509,13 @@ mod tests {
             load_balancer: Arc::new(crate::gateway::load_balancer::LoadBalancer::new(
                 crate::gateway::load_balancer::LoadBalancerStrategy::RoundRobin,
             )),
+            log_store: Arc::new(crate::gateway::log_store::LogStore::default()),
+            response_cache: Arc::new(AsyncMutex::new(
+                crate::gateway::response_cache::ResponseCache::new(
+                    crate::gateway::response_cache::CacheConfig::default(),
+                    None,
+                ),
+            )),
         }
     }
 
@@ -4715,27 +4759,23 @@ mod tests {
             "conversationState": {
                 "history": [
                     {
-                        "user_input_message": {
-                            "user_input_message_context": {
-                                "text": "First message"
-                            }
+                        "userInputMessage": {
+                            "content": "First message"
                         }
                     },
                     {
-                        "assistant_response_message": {
-                            "text": "First response"
+                        "assistantResponseMessage": {
+                            "content": "First response"
                         }
                     },
                     {
-                        "user_input_message": {
-                            "user_input_message_context": {
-                                "text": "Second message"
-                            }
+                        "userInputMessage": {
+                            "content": "Second message"
                         }
                     },
                     {
-                        "assistant_response_message": {
-                            "text": "Second response"
+                        "assistantResponseMessage": {
+                            "content": "Second response"
                         }
                     }
                 ]
@@ -4760,11 +4800,11 @@ mod tests {
             "conversationState": {
                 "history": [
                     {
-                        "assistant_response_message": {
-                            "text": "Let me search for that",
-                            "tool_uses": [
+                        "assistantResponseMessage": {
+                            "content": "Let me search for that",
+                            "toolUses": [
                                 {
-                                    "id": "call_1",
+                                    "toolUseId": "call_1",
                                     "name": "search",
                                     "input": {"q": "test"}
                                 }
@@ -4772,22 +4812,22 @@ mod tests {
                         }
                     },
                     {
-                        "user_input_message": {
-                            "user_input_message_context": {
-                                "tool_results": [
+                        "userInputMessage": {
+                            "content": "",
+                            "userInputMessageContext": {
+                                "toolResults": [
                                     {
-                                        "call_id": "call_1",
-                                        "output": "Found results"
+                                        "toolUseId": "call_1",
+                                        "content": [{"text": "Found results"}],
+                                        "status": "success"
                                     }
                                 ]
                             }
                         }
                     },
                     {
-                        "user_input_message": {
-                            "user_input_message_context": {
-                                "text": "Recent message"
-                            }
+                        "userInputMessage": {
+                            "content": "Recent message"
                         }
                     }
                 ]
@@ -4803,9 +4843,12 @@ mod tests {
                 .and_then(|v| v.as_array())
                 .unwrap();
 
-            if history.len() == 1 {
-                assert!(history[0].get("user_input_message").is_some());
-            }
+            // 回归：裁剪+头部合法化后，history 不能以 assistant 开始
+            assert!(history[0].get("assistantResponseMessage").is_none());
+            // 回归：首条 user 不能残留孤儿 toolResults（否则 Kiro 判 "Improperly formed request" 400）
+            assert!(history[0]
+                .pointer("/userInputMessage/userInputMessageContext/toolResults")
+                .is_none());
         }
     }
 
@@ -4867,6 +4910,7 @@ mod tests {
             tool_choice: None,
             previous_response_id: Some("resp_prev_123".to_string()),
             thinking: None,
+            tool_name_map: Default::default(),
         };
 
         let merged = restore_responses_session_messages(&state, &request).await;
@@ -4942,12 +4986,12 @@ mod tests {
             cache_read_input_tokens: None,
             cache_creation_input_tokens: None,
             metering_usage: None,
+            thinking_signature: None,
         };
 
         let response = build_responses_response_with_ids(
             "gpt-5.4",
             &aggregated,
-            &[],
             "resp_test",
             "msg_test",
             123,
