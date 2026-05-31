@@ -313,7 +313,7 @@ pub async fn switch_kiro_account(
                 "accessToken": access_token,
                 "refreshToken": refresh_token,
                 "profileArn": arn,
-                "expiresAt": expires_at.to_rfc3339(),
+                "expiresAt": expires_at.to_rfc3339_opts(chrono::SecondsFormat::Millis, true),
                 "authMethod": "social",
                 "provider": provider
             })
