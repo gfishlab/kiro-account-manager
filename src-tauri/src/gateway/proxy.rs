@@ -249,6 +249,10 @@ struct RequestLogContext<'a> {
     model_hint: Option<String>,
     /// 是否流式请求（避免 request 为 None 时丢失信息）
     is_stream: Option<bool>,
+    /// 上游账号来源标签（owned 回退，供流式 'static 上下文使用，避免持有 upstream 引用时丢失归因）
+    upstream_source_label: Option<String>,
+    /// 上游账号区域（owned 回退，同 upstream_source_label）
+    upstream_region: Option<String>,
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -838,6 +842,8 @@ async fn guarded_local_response(
         request_body,
         model_hint: None,
         is_stream: None,
+        upstream_source_label: None,
+        upstream_region: None,
     };
 
     if state.config.local_only && !client_addr.ip().is_loopback() {
@@ -1021,8 +1027,14 @@ fn write_request_log(
         stream: context.is_stream
             .or_else(|| context.request.map(|item| item.stream))
             .unwrap_or(false),
-        upstream_source: context.upstream.map(|item| item.source_label.clone()),
-        region: context.upstream.map(|item| item.region.clone()),
+        upstream_source: context
+            .upstream
+            .map(|item| item.source_label.clone())
+            .or_else(|| context.upstream_source_label.clone()),
+        region: context
+            .upstream
+            .map(|item| item.region.clone())
+            .or_else(|| context.upstream_region.clone()),
         status_code: status.as_u16(),
         outcome: outcome.to_string(),
         duration_ms,
@@ -1174,6 +1186,8 @@ pub async fn proxy_handler(
         request_body: Some(raw_request_body.as_str()),
         model_hint,
         is_stream: None,
+        upstream_source_label: None,
+        upstream_region: None,
     };
 
     if state.config.local_only && !client_addr.ip().is_loopback() {
@@ -1698,6 +1712,13 @@ pub async fn proxy_handler(
             request_body: None,
             model_hint: upstream_payload_log_context.model_hint.clone(),
             is_stream: Some(true),
+            // 丢弃 upstream 引用前，保留 owned 归因，避免流式日志丢失账号来源/区域
+            upstream_source_label: upstream_payload_log_context
+                .upstream
+                .map(|u| u.source_label.clone()),
+            upstream_region: upstream_payload_log_context
+                .upstream
+                .map(|u| u.region.clone()),
         };
 
         return stream_proxy_response(
