@@ -350,7 +350,7 @@ impl TokenizerType {
     fn from_model_id(model_id: &str) -> Self {
         let model_lower = model_id.to_lowercase();
         
-        // Claude 系列：4.5, 4.6, 4.7 及所有变体
+        // Claude 系列：4.5, 4.6, 4.7 ,4.8及所有变体
         if model_lower.contains("claude") {
             TokenizerType::Claude
         } else if model_lower.contains("gpt") || model_lower.contains("o1") || model_lower.contains("o3") {
@@ -659,6 +659,8 @@ async fn get_model_max_input_tokens(model_id: &str) -> usize {
     // 根据模型 ID 返回对应的 token 限制
     if model_lower == "auto" {
         1_000_000 // auto 模型支持 1M tokens
+    } else if model_lower.contains("opus-4.8") || model_lower.contains("opus-4-8") {
+        1_000_000 // Claude Opus 4.7: 1M tokens
     } else if model_lower.contains("opus-4.7") || model_lower.contains("opus-4-7") {
         1_000_000 // Claude Opus 4.7: 1M tokens
     } else if model_lower.contains("opus-4.6") || model_lower.contains("opus-4-6") {

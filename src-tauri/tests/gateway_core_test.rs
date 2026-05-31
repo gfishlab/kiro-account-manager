@@ -233,6 +233,8 @@ fn test_get_model_max_input_tokens() {
         let model_lower = model_id.to_lowercase();
         if model_lower == "auto" {
             1_000_000
+        } else if model_lower.contains("opus-4.8") || model_lower.contains("opus-4-8") {
+            1_000_000
         } else if model_lower.contains("opus-4.7") || model_lower.contains("opus-4-7") {
             1_000_000
         } else if model_lower.contains("opus-4.6") || model_lower.contains("opus-4-6") {
@@ -249,13 +251,14 @@ fn test_get_model_max_input_tokens() {
     };
 
     assert_eq!(get_max_tokens("auto"), 1_000_000);
+    assert_eq!(get_max_tokens("claude-opus-4.8"), 1_000_000);
     assert_eq!(get_max_tokens("claude-opus-4.7"), 1_000_000);
+    assert_eq!(get_max_tokens("claude-opus-4.6"), 1_000_000);
     assert_eq!(get_max_tokens("claude-sonnet-4.6"), 1_000_000);
+    assert_eq!(get_max_tokens("claude-sonnet-4.5"), 200_000);
     assert_eq!(get_max_tokens("qwen3-coder"), 256_000);
     assert_eq!(get_max_tokens("llama-3-70b"), 128_000);
     assert_eq!(get_max_tokens("deepseek-chat"), 128_000);
-    assert_eq!(get_max_tokens("claude-sonnet-4.5"), 200_000);
-
     println!("✓ Model max input tokens detection works correctly");
 }
 

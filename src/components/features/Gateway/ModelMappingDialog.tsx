@@ -10,6 +10,8 @@ import { Switch } from '@/components/ui/switch'
 
 // Kiro 内部模型格式（点号分隔）— 用于目标模型下拉
 const TARGET_MODELS = [
+  'claude-opus-4.8',
+  'claude-opus-4.8-thinking',
   'claude-opus-4.7',
   'claude-opus-4.7-thinking',
   'claude-opus-4.6',
@@ -33,6 +35,8 @@ const TARGET_MODELS = [
 // 常见源模型名 — 用于源模型下拉
 const SOURCE_MODELS = [
   // Claude（含 thinking 变体）
+  'claude-opus-4.8',
+  'claude-opus-4.8-thinking',
   'claude-opus-4.7',
   'claude-opus-4.7-thinking',
   'claude-opus-4.6',
@@ -75,7 +79,7 @@ const SOURCE_MODELS = [
 // 预置 GPT/Codex → Claude 映射规则（5.5 ~ 5.1 系列）
 const PRESET_RULES = [
   // GPT-5.5 系列 → Opus 4.7
-  { source: 'gpt-5.5', target: 'claude-opus-4.7', name: 'GPT-5.5 → Opus 4.7' },
+  { source: 'gpt-5.5', target: 'claude-opus-4.8', name: 'GPT-5.5 → Opus 4.8' },
   { source: 'gpt-5.5-pro', target: 'claude-opus-4.7', name: 'GPT-5.5-pro → Opus 4.7' },
   { source: 'gpt-5.5-instant', target: 'claude-sonnet-4.6', name: 'GPT-5.5-instant → Sonnet 4.6' },
   // GPT-5.4 系列 → Opus/Sonnet 4.6
