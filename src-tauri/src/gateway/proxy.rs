@@ -38,6 +38,9 @@ use crate::{
 
 const MAX_FAILURES_PER_ACCOUNT: u32 = 3;
 const MAX_KIRO_PAYLOAD_SIZE: usize = 450 * 1024; // 450KB - Kiro API 的 HTTP 请求大小限制（更保守）
+// 工具定义过大缓解：payload 超过此值时截断各工具描述以回收字节（input schema 为调用必需，保持不动）
+const KIRO_TOOL_TRIM_THRESHOLD: usize = 200 * 1024; // 200KB
+const TOOL_DESC_LEN_WHEN_TRIMMED: usize = 600; // 截断后每个工具描述保留的字节上限
 
 // Token 限制的默认值（当无法从 API 获取时使用）
 #[allow(dead_code)]
@@ -780,6 +783,39 @@ fn trim_kiro_payload_history(payload: &mut Value, max_bytes: usize) -> bool {
     trimmed
 }
 
+/// payload 过大时截断各工具的描述以回收字节（input schema 为调用必需，保持不动）。
+/// 返回截断后的 payload 字节数。
+fn trim_kiro_payload_tool_descriptions(payload: &mut Value, max_desc_len: usize) -> usize {
+    let mut trimmed = 0;
+    if let Some(tools) = payload
+        .pointer_mut("/conversationState/currentMessage/userInputMessage/userInputMessageContext/tools")
+        .and_then(|v| v.as_array_mut())
+    {
+        for tool in tools.iter_mut() {
+            if let Some(desc) = tool.pointer_mut("/toolSpecification/description") {
+                let replacement = match desc.as_str() {
+                    Some(s) if s.len() > max_desc_len => {
+                        Some(format!("{}…", &s[..safe_truncate(s, max_desc_len)]))
+                    }
+                    _ => None,
+                };
+                if let Some(new) = replacement {
+                    *desc = Value::String(new);
+                    trimmed += 1;
+                }
+            }
+        }
+    }
+    if trimmed > 0 {
+        log::info!(
+            "[网关] payload 过大，已截断 {} 个工具描述至 ~{} 字节",
+            trimmed,
+            max_desc_len
+        );
+    }
+    check_payload_size(payload)
+}
+
 async fn guarded_local_response(
     state: RouterState,
     client_addr: SocketAddr,
@@ -1425,6 +1461,12 @@ pub async fn proxy_handler(
         .unwrap_or_else(|_| json!({}));
 
     let original_size = check_payload_size(&payload_value);
+    // 工具定义过大缓解：明显偏大时先截断工具描述回收字节（input schema 不动）
+    if original_size > KIRO_TOOL_TRIM_THRESHOLD {
+        let after = trim_kiro_payload_tool_descriptions(&mut payload_value, TOOL_DESC_LEN_WHEN_TRIMMED);
+        log::info!("[网关] 工具描述截断：payload {} → {} 字节", original_size, after);
+    }
+    let original_size = check_payload_size(&payload_value);
     if original_size > MAX_KIRO_PAYLOAD_SIZE {
         log::info!(
             "[网关] Payload 大小 {} 字节超过限制 {} 字节。裁剪历史记录...",
@@ -1616,6 +1658,17 @@ pub async fn proxy_handler(
                 }
                 
                 // 其他错误直接返回
+                // 超大 payload 的传输失败（502）：给出可执行指引而非误导性的"临时问题"
+                let message = if status == StatusCode::BAD_GATEWAY
+                    && payload_size > KIRO_TOOL_TRIM_THRESHOLD
+                {
+                    format!(
+                        "{message}（上游请求体约 {}KB、工具数过多，疑似超出 Kiro 上游请求大小限制；请在 Claude Code 精简启用的 MCP 工具，例如临时关闭暂不需要的 gitlab/github）",
+                        payload_size / 1024
+                    )
+                } else {
+                    message
+                };
                 return gateway_error_with_log(
                     &state,
                     format,
@@ -1939,7 +1992,7 @@ async fn send_generate_request<T: serde::Serialize + ?Sized>(
     loop {
         attempt += 1;
 
-        let upstream_resp = with_kiro_upstream_headers(
+        let upstream_resp = match with_kiro_upstream_headers(
             http.post(&upstream_url),
             upstream,
             "application/vnd.amazon.eventstream",
@@ -1950,14 +2003,30 @@ async fn send_generate_request<T: serde::Serialize + ?Sized>(
         .json(upstream_payload)
         .send()
         .await
-        .map_err(|error| {
-            (
-                StatusCode::BAD_GATEWAY,
-                "api_error",
-                sanitize_error(&format!("上游请求失败: {error}")),
-                None,
-            )
-        })?;
+        {
+            Ok(resp) => resp,
+            Err(error) => {
+                // 传输层失败（连接重置/超时等）：退避重试，而非一发即 502
+                if attempt < MAX_RETRIES {
+                    let backoff_ms = 500 * 2u64.pow(attempt - 1);
+                    log::warn!(
+                        "[网关] 上游发送失败(传输层, 尝试 {}/{})：{}，{}ms 后重试",
+                        attempt,
+                        MAX_RETRIES,
+                        error,
+                        backoff_ms
+                    );
+                    tokio::time::sleep(tokio::time::Duration::from_millis(backoff_ms)).await;
+                    continue;
+                }
+                return Err((
+                    StatusCode::BAD_GATEWAY,
+                    "api_error",
+                    sanitize_error(&format!("上游请求失败: {error}")),
+                    None,
+                ));
+            }
+        };
 
         let status = upstream_resp.status();
 
