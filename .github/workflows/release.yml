@@ -108,6 +108,14 @@ jobs:
           
           echo "" >> release_notes.md
           echo "" >> release_notes.md
+          echo "## ⚠️ macOS 首次打开" >> release_notes.md
+          echo "" >> release_notes.md
+          echo "本包未经 Apple 签名/公证，首次打开若提示\"已损坏，无法打开\"，请执行：" >> release_notes.md
+          echo "" >> release_notes.md
+          echo '```bash' >> release_notes.md
+          echo "xattr -cr /Applications/KiroAccountManager.app" >> release_notes.md
+          echo '```' >> release_notes.md
+          echo "" >> release_notes.md
           echo "---" >> release_notes.md
           echo "" >> release_notes.md
           echo "📥 **下载地址**：[GitHub Releases](https://github.com/${{ github.repository }}/releases/tag/${CURRENT_TAG})" >> release_notes.md
