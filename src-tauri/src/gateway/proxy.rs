@@ -660,7 +660,7 @@ async fn get_model_max_input_tokens(model_id: &str) -> usize {
     if model_lower == "auto" {
         1_000_000 // auto 模型支持 1M tokens
     } else if model_lower.contains("opus-4.8") || model_lower.contains("opus-4-8") {
-        1_000_000 // Claude Opus 4.7: 1M tokens
+        1_000_000 // Claude Opus 4.8: 1M tokens
     } else if model_lower.contains("opus-4.7") || model_lower.contains("opus-4-7") {
         1_000_000 // Claude Opus 4.7: 1M tokens
     } else if model_lower.contains("opus-4.6") || model_lower.contains("opus-4-6") {
